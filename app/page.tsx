@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Room, RemoteTrack, RemoteTrackPublication, RemoteParticipant } from "livekit-client";
+import { Room } from "livekit-client";
 
 export default function Home() {
   const [roomName, setRoomName] = useState("test-room");
@@ -28,25 +28,24 @@ export default function Home() {
 
     const room = new Room();
 
-    // 🔊 相手の音声を受信したら再生
-    room.on(
-      "trackSubscribed",
-      (track: RemoteTrack, publication: RemoteTrackPublication, participant: RemoteParticipant) => {
-        if (track.kind === "audio") {
-          const audioElement = track.attach();
-          audioElement.autoplay = true;
-          document.body.appendChild(audioElement);
-        }
+    // 🔊 相手の音声を受信
+    room.on("trackSubscribed", (track) => {
+      if (track.kind === "audio") {
+        const audioElement = track.attach();
+        audioElement.autoplay = true;
+        document.body.appendChild(audioElement);
       }
-    );
+    });
 
     await room.connect(
       "wss://intercom-bf7qeml2.livekit.cloud",
       data.token
     );
 
-    // 🎤 マイク有効化
-    await room.localParticipant.enableMicrophone();
+    // 🎤 マイク取得して公開
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const audioTrack = stream.getAudioTracks()[0];
+    await room.localParticipant.publishTrack(audioTrack);
 
     setRoomInstance(room);
     setConnected(true);
@@ -54,7 +53,7 @@ export default function Home() {
 
   const disconnect = async () => {
     if (roomInstance) {
-      await roomInstance.disconnect();
+      roomInstance.disconnect();
       setConnected(false);
     }
   };
