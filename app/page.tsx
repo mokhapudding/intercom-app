@@ -34,10 +34,10 @@ export default function Home() {
       data.token
     );
 
-    // 🎤 最初はマイクOFF
+    // 最初はマイクOFF
     await room.localParticipant.setMicrophoneEnabled(false);
 
-    // 👥 参加者更新
+    // 参加者更新
     const updateParticipants = () => {
       const remoteNames = Array.from(
         room.remoteParticipants.values()
@@ -51,18 +51,18 @@ export default function Home() {
     room.on(RoomEvent.ParticipantConnected, updateParticipants);
     room.on(RoomEvent.ParticipantDisconnected, updateParticipants);
 
-    // 🔊 音声再生（自分除外）
+    // 音声再生（自分除外）
     room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
       if (participant.identity === username) return;
 
       if (track.kind === Track.Kind.Audio) {
         const el = track.attach();
-        el.volume = 0.3; // ハウリング軽減
+        el.volume = 0.3;
         document.body.appendChild(el);
       }
     });
 
-    // 📡 DataChannel受信
+    // DataChannel受信
     room.on(RoomEvent.DataReceived, (payload, participant) => {
       if (!participant) return;
 
@@ -85,7 +85,7 @@ export default function Home() {
   const startTalking = async () => {
     const room = roomRef.current;
     if (!room) return;
-    if (lockedBy && lockedBy !== username) return;
+    if (!!lockedBy && lockedBy !== username) return;
 
     await room.localParticipant.setMicrophoneEnabled(true);
 
@@ -132,7 +132,7 @@ export default function Home() {
           <button
             onMouseDown={startTalking}
             onMouseUp={stopTalking}
-            disabled={lockedBy && lockedBy !== username}
+            disabled={!!lockedBy && lockedBy !== username}
             style={{
               width: 200,
               height: 80,
