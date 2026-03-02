@@ -123,15 +123,15 @@ export default function Home() {
             onChange={(e) => setUsername(e.target.value)}
             placeholder="名前"
           />
-          <button onClick={connectToRoom}>接続</button>
-        </>
-      ) : (
-        <>
-          <h2>接続中: {username}</h2>
-
           <button
-            onMouseDown={startTalking}
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              startTalking();
+            }}
             onMouseUp={stopTalking}
+            onMouseLeave={stopTalking}
+            onContextMenu={(e) => e.preventDefault()}
             onTouchStart={(e) => {
               e.preventDefault();
               startTalking();
@@ -148,6 +148,13 @@ export default function Home() {
               backgroundColor:
                 speakingUser === username ? "green" : "gray",
               color: "white",
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              touchAction: "manipulation",
+              cursor:
+                lockedBy !== null && lockedBy !== username
+                  ? "not-allowed"
+                  : "pointer",
             }}
           >
             押して話す
