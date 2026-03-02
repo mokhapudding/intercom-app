@@ -123,15 +123,17 @@ export default function Home() {
             onChange={(e) => setUsername(e.target.value)}
             placeholder="名前"
           />
-          <button onClick={connectToRoom}>接続</button>
-        </>
-      ) : (
-        <>
-          <h2>接続中: {username}</h2>
-
           <button
             onMouseDown={startTalking}
             onMouseUp={stopTalking}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              startTalking();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              stopTalking();
+            }}
             disabled={!!lockedBy && lockedBy !== username}
             style={{
               width: 200,
