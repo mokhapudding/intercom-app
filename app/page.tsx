@@ -124,9 +124,77 @@ export default function Home() {
             placeholder="名前"
           />
           <button
+            onClick={connectToRoom}
+            style={{ marginLeft: 10 }}
+          >
+            接続
+          </button>
+        </>
+      )}
+
+      {connected && (
+        <>
+          <h2>インカム接続中</h2>
+
+          <button
             type="button"
             onMouseDown={(e) => {
               e.preventDefault();
+              startTalking();
+            }}
+            onMouseUp={stopTalking}
+            onMouseLeave={stopTalking}
+            onContextMenu={(e) => e.preventDefault()}
+            onTouchStart={(e) => {
+              e.preventDefault();
+              startTalking();
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              stopTalking();
+            }}
+            disabled={lockedBy !== null && lockedBy !== username}
+            style={{
+              width: 200,
+              height: 80,
+              fontSize: 20,
+              backgroundColor:
+                speakingUser === username ? "green" : "gray",
+              color: "white",
+              userSelect: "none",
+              WebkitUserSelect: "none",
+              touchAction: "manipulation",
+              cursor:
+                lockedBy !== null && lockedBy !== username
+                  ? "not-allowed"
+                  : "pointer",
+            }}
+          >
+            押して話す
+          </button>
+
+          <h3>参加者一覧</h3>
+          <ul>
+            {participants.map((name) => (
+              <li
+                key={name}
+                style={{
+                  color: speakingUser === name ? "green" : "black",
+                  fontWeight:
+                    speakingUser === name ? "bold" : "normal",
+                }}
+              >
+                {name}
+                {speakingUser === name && " 🎤"}
+              </li>
+            ))}
+          </ul>
+
+          {lockedBy && <p>🔒 {lockedBy} が発話中</p>}
+        </>
+      )}
+    </div>
+  );
               startTalking();
             }}
             onMouseUp={stopTalking}
