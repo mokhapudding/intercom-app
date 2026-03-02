@@ -49,7 +49,12 @@ export default function Home() {
     updateParticipants();
 
     room.on(RoomEvent.ParticipantConnected, updateParticipants);
-    room.on(RoomEvent.ParticipantDisconnected, updateParticipants);
+    room.on(RoomEvent.ParticipantDisconnected, () => {
+      updateParticipants();
+      // ロック強制解除
+      setLockedBy(null);
+      setSpeakingUser(null);
+    });
 
     // 音声再生（自分除外）
     room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
@@ -85,17 +90,15 @@ export default function Home() {
   const startTalking = async () => {
     const room = roomRef.current;
     if (!room) return;
-    if (!!lockedBy && lockedBy !== username) return;
+    if (lockedBy !== null && lockedBy !== username) return;
 
     await room.localParticipant.setMicrophoneEnabled(true);
 
+    // 先にローカル更新せず、DataChannel同期に任せる
     room.localParticipant.publishData(
       new TextEncoder().encode("TALKING"),
       { reliable: true }
     );
-
-    setLockedBy(username);
-    setSpeakingUser(username);
   };
 
   const stopTalking = async () => {
@@ -108,9 +111,6 @@ export default function Home() {
       new TextEncoder().encode("STOP"),
       { reliable: true }
     );
-
-    setLockedBy(null);
-    setSpeakingUser(null);
   };
 
   return (
@@ -140,7 +140,7 @@ export default function Home() {
               e.preventDefault();
               stopTalking();
             }}
-            disabled={!!lockedBy && lockedBy !== username}
+            disabled={lockedBy !== null && lockedBy !== username}
             style={{
               width: 200,
               height: 80,
