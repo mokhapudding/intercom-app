@@ -1,14 +1,9 @@
 "use client";
 
 import { useState, useRef } from "react";
-import {
-  Room,
-  RoomEvent,
-  RemoteParticipant,
-} from "livekit-client";
+import { Room, RoomEvent } from "livekit-client";
 
 export default function Home() {
-  const [room, setRoom] = useState<Room | null>(null);
   const [connected, setConnected] = useState(false);
   const [username, setUsername] = useState("");
   const [participants, setParticipants] = useState<string[]>([]);
@@ -17,7 +12,6 @@ export default function Home() {
 
   const roomRef = useRef<Room | null>(null);
 
-  // 🔗 接続
   const connectToRoom = async () => {
     if (!username) return alert("名前入れてや");
 
@@ -29,78 +23,69 @@ export default function Home() {
 
     const data = await res.json();
 
-    const newRoom = new Room();
-    roomRef.current = newRoom;
+    const room = new Room();
+    roomRef.current = room;
 
-    await newRoom.connect(
+    await room.connect(
       "wss://intercom-bf7qeml2.livekit.cloud",
       data.token
     );
 
-    // 🎤 マイク初期化（エコー対策全部ON）
-    await newRoom.localParticipant.setMicrophoneEnabled(false, {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    });
+    // 🎤 マイクOFFで初期化（エコー軽減）
+    await room.localParticipant.setMicrophoneEnabled(false);
 
-    // 👥 参加者更新
+    // 参加者更新
     const updateParticipants = () => {
-      const remoteNames = Array.from(
-        newRoom.remoteParticipants.values()
-      ).map((p: RemoteParticipant) => p.identity);
-
-      setParticipants([username, ...remoteNames]);
+      const remotes = Array.from(room.remoteParticipants.values()).map(
+        (p) => p.identity
+      );
+      setParticipants([username, ...remotes]);
     };
 
     updateParticipants();
 
-    newRoom.on(RoomEvent.ParticipantConnected, updateParticipants);
-    newRoom.on(RoomEvent.ParticipantDisconnected, updateParticipants);
+    room.on(RoomEvent.ParticipantConnected, updateParticipants);
+    room.on(RoomEvent.ParticipantDisconnected, updateParticipants);
 
-    // 🔊 リモート音声再生
-    newRoom.on(
-      RoomEvent.TrackSubscribed,
-      (track, publication, participant) => {
-        if (participant.identity === username) return;
+    // 🔊 音声再生（自分除外）
+    room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+      if (participant.identity === username) return;
 
-        if (track.kind === "audio") {
-          const audioElement = track.attach();
-          audioElement.volume = 0.3; // 🔥 音量下げてハウリング軽減
-          document.body.appendChild(audioElement);
-        }
+      if (track.kind === "audio") {
+        const el = track.attach();
+        el.volume = 0.3;
+        document.body.appendChild(el);
       }
-    );
+    });
 
-    // 📡 Data受信（ロック＆話者表示）
-    newRoom.on(RoomEvent.DataReceived, (payload, participant) => {
+    // 📡 Data受信
+    room.on(RoomEvent.DataReceived, (payload, participant) => {
       if (!participant) return;
 
-      const message = new TextDecoder().decode(payload);
+      const msg = new TextDecoder().decode(payload);
 
-      if (message === "TALKING") {
+      if (msg === "TALKING") {
         setLockedBy(participant.identity);
         setSpeakingUser(participant.identity);
       }
 
-      if (message === "STOP") {
+      if (msg === "STOP") {
         setLockedBy(null);
         setSpeakingUser(null);
       }
     });
 
-    setRoom(newRoom);
     setConnected(true);
   };
 
-  // 🎤 押したら話す
   const startTalking = async () => {
-    if (!roomRef.current) return;
+    const room = roomRef.current;
+    if (!room) return;
     if (lockedBy && lockedBy !== username) return;
 
-    await roomRef.current.localParticipant.setMicrophoneEnabled(true);
+    await room.localParticipant.setMicrophoneEnabled(true);
 
-    roomRef.current.localParticipant.publishData(
+    room.localParticipant.publishData(
       new TextEncoder().encode("TALKING"),
       { reliable: true }
     );
@@ -109,13 +94,13 @@ export default function Home() {
     setSpeakingUser(username);
   };
 
-  // 🎤 離したら止める
   const stopTalking = async () => {
-    if (!roomRef.current) return;
+    const room = roomRef.current;
+    if (!room) return;
 
-    await roomRef.current.localParticipant.setMicrophoneEnabled(false);
+    await room.localParticipant.setMicrophoneEnabled(false);
 
-    roomRef.current.localParticipant.publishData(
+    room.localParticipant.publishData(
       new TextEncoder().encode("STOP"),
       { reliable: true }
     );
@@ -140,7 +125,6 @@ export default function Home() {
         <>
           <h2>接続中: {username}</h2>
 
-          {/* 🎤 PTTボタン */}
           <button
             onMouseDown={startTalking}
             onMouseUp={stopTalking}
@@ -174,11 +158,7 @@ export default function Home() {
             ))}
           </ul>
 
-          {lockedBy && (
-            <p>
-              🔒 {lockedBy} が発話中
-            </p>
-          )}
+          {lockedBy && <p>🔒 {lockedBy} が発話中</p>}
         </>
       )}
     </div>
