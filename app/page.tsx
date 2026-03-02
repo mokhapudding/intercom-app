@@ -115,7 +115,7 @@ export default function Home() {
 
   return (
     <div style={{ padding: 20 }}>
-      {!connected ? (
+      {!connected && (
         <>
           <h2>名前入力</h2>
           <input
