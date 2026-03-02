@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Room, RoomEvent } from "livekit-client";
+import { Room, RoomEvent, Track } from "livekit-client";
 
 export default function Home() {
   const [connected, setConnected] = useState(false);
@@ -13,7 +13,10 @@ export default function Home() {
   const roomRef = useRef<Room | null>(null);
 
   const connectToRoom = async () => {
-    if (!username) return alert("名前入れてや");
+    if (!username) {
+      alert("名前入れてや");
+      return;
+    }
 
     const res = await fetch("/api/token", {
       method: "POST",
@@ -31,15 +34,16 @@ export default function Home() {
       data.token
     );
 
-    // 🎤 マイクOFFで初期化（エコー軽減）
+    // 🎤 最初はマイクOFF
     await room.localParticipant.setMicrophoneEnabled(false);
 
-    // 参加者更新
+    // 👥 参加者更新
     const updateParticipants = () => {
-      const remotes = Array.from(room.remoteParticipants.values()).map(
-        (p) => p.identity
-      );
-      setParticipants([username, ...remotes]);
+      const remoteNames = Array.from(
+        room.remoteParticipants.values()
+      ).map((p) => p.identity);
+
+      setParticipants([username, ...remoteNames]);
     };
 
     updateParticipants();
@@ -51,14 +55,14 @@ export default function Home() {
     room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
       if (participant.identity === username) return;
 
-      if (track.kind === "audio") {
+      if (track.kind === Track.Kind.Audio) {
         const el = track.attach();
-        el.volume = 0.3;
+        el.volume = 0.3; // ハウリング軽減
         document.body.appendChild(el);
       }
     });
 
-    // 📡 Data受信
+    // 📡 DataChannel受信
     room.on(RoomEvent.DataReceived, (payload, participant) => {
       if (!participant) return;
 
