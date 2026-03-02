@@ -1,143 +1,174 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Room, LocalAudioTrack } from "livekit-client";
+import { useState, useEffect, useRef } from "react";
+import { Room, RoomEvent, RemoteParticipant } from "livekit-client";
 
 export default function Home() {
-  const [roomName, setRoomName] = useState("test-room");
-  const [username, setUsername] = useState("");
+  const [room, setRoom] = useState<Room | null>(null);
   const [connected, setConnected] = useState(false);
+  const [username, setUsername] = useState("");
+  const [participants, setParticipants] = useState<string[]>([]);
+  const [lockedBy, setLockedBy] = useState<string | null>(null);
+  const [speakingUser, setSpeakingUser] = useState<string | null>(null);
 
   const roomRef = useRef<Room | null>(null);
-  const audioTrackRef = useRef<LocalAudioTrack | null>(null);
 
+  // 🔗 接続処理
   const connectToRoom = async () => {
-    if (!username) {
-      alert("名前を入力してや");
-      return;
-    }
+    if (!username) return alert("名前入れてや");
 
     const res = await fetch("/api/token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        room: roomName,
-        username: username,
-      }),
+      body: JSON.stringify({ room: "test-room", username }),
     });
 
     const data = await res.json();
 
-    const room = new Room();
+    const newRoom = new Room();
+    roomRef.current = newRoom;
 
-    // 🔊 相手の音声を再生
-    room.on("trackSubscribed", (track) => {
-      if (track.kind === "audio") {
-        const audioElement = track.attach();
-        audioElement.autoplay = true;
-        document.body.appendChild(audioElement);
-      }
-    });
-
-    await room.connect(
+    await newRoom.connect(
       "wss://intercom-bf7qeml2.livekit.cloud",
       data.token
     );
 
-    // 🎤 マイク取得（最初はミュート状態）
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-      },
+    // 🎤 マイク初期化（エコー対策全部ON）
+    await newRoom.localParticipant.setMicrophoneEnabled(false, {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
     });
 
-    const track = stream.getAudioTracks()[0];
-    track.enabled = false; // ← 初期は送らない
+    // 👂 参加者管理
+    const updateParticipants = () => {
+      const names = Array.from(newRoom.participants.values()).map(
+        (p) => p.identity
+      );
+      setParticipants([username, ...names]);
+    };
 
-    const localTrack = new LocalAudioTrack(track);
-    await room.localParticipant.publishTrack(localTrack);
+    updateParticipants();
 
-    roomRef.current = room;
-    audioTrackRef.current = localTrack;
+    newRoom.on(RoomEvent.ParticipantConnected, updateParticipants);
+    newRoom.on(RoomEvent.ParticipantDisconnected, updateParticipants);
 
+    // 🔊 音声再生（自分は除外）
+    newRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      if (participant.identity === username) return;
+
+      if (track.kind === "audio") {
+        const audioElement = track.attach();
+        audioElement.volume = 0.3; // 🔥 音量下げてハウリング軽減
+        document.body.appendChild(audioElement);
+      }
+    });
+
+    // 📡 DataChannel受信
+    newRoom.on(RoomEvent.DataReceived, (payload, participant) => {
+      const message = new TextDecoder().decode(payload);
+
+      if (message === "TALKING") {
+        setLockedBy(participant.identity);
+        setSpeakingUser(participant.identity);
+      }
+
+      if (message === "STOP") {
+        setLockedBy(null);
+        setSpeakingUser(null);
+      }
+    });
+
+    setRoom(newRoom);
     setConnected(true);
   };
 
-  const disconnect = async () => {
-    if (roomRef.current) {
-      roomRef.current.disconnect();
-      setConnected(false);
-    }
+  // 🎤 PTT押した
+  const startTalking = async () => {
+    if (!roomRef.current) return;
+    if (lockedBy && lockedBy !== username) return;
+
+    await roomRef.current.localParticipant.setMicrophoneEnabled(true);
+
+    roomRef.current.localParticipant.publishData(
+      new TextEncoder().encode("TALKING"),
+      { reliable: true }
+    );
+
+    setLockedBy(username);
+    setSpeakingUser(username);
   };
 
-  // 🔴 押してる間だけ送信
-  const startTalking = () => {
-    if (audioTrackRef.current) {
-      audioTrackRef.current.mediaStreamTrack.enabled = true;
-    }
-  };
+  // 🎤 PTT離した
+  const stopTalking = async () => {
+    if (!roomRef.current) return;
 
-  const stopTalking = () => {
-    if (audioTrackRef.current) {
-      audioTrackRef.current.mediaStreamTrack.enabled = false;
-    }
+    await roomRef.current.localParticipant.setMicrophoneEnabled(false);
+
+    roomRef.current.localParticipant.publishData(
+      new TextEncoder().encode("STOP"),
+      { reliable: true }
+    );
+
+    setLockedBy(null);
+    setSpeakingUser(null);
   };
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>店舗インカム（PTT）</h1>
-
-      {!connected && (
+    <div style={{ padding: 20 }}>
+      {!connected ? (
         <>
-          <div>
-            <input
-              placeholder="ルーム名"
-              value={roomName}
-              onChange={(e) => setRoomName(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <input
-              placeholder="名前"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-            />
-          </div>
-
-          <button onClick={connectToRoom}>
-            接続する
-          </button>
+          <h2>名前入力</h2>
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="名前"
+          />
+          <button onClick={connectToRoom}>接続</button>
         </>
-      )}
-
-      {connected && (
+      ) : (
         <>
-          <p>接続中...</p>
+          <h2>接続中: {username}</h2>
 
+          {/* 🎤 PTTボタン */}
           <button
-            style={{
-              marginTop: 20,
-              padding: "30px",
-              fontSize: "20px",
-              backgroundColor: "red",
-              color: "white",
-              borderRadius: "10px",
-            }}
             onMouseDown={startTalking}
             onMouseUp={stopTalking}
-            onTouchStart={startTalking}
-            onTouchEnd={stopTalking}
+            disabled={lockedBy && lockedBy !== username}
+            style={{
+              width: 200,
+              height: 80,
+              fontSize: 20,
+              backgroundColor:
+                speakingUser === username ? "green" : "gray",
+              color: "white",
+            }}
           >
             押して話す
           </button>
 
-          <div style={{ marginTop: 20 }}>
-            <button onClick={disconnect}>
-              切断する
-            </button>
-          </div>
+          <h3>参加者一覧</h3>
+          <ul>
+            {participants.map((name) => (
+              <li
+                key={name}
+                style={{
+                  color: speakingUser === name ? "green" : "black",
+                  fontWeight:
+                    speakingUser === name ? "bold" : "normal",
+                }}
+              >
+                {name}
+                {speakingUser === name && " 🎤"}
+              </li>
+            ))}
+          </ul>
+
+          {lockedBy && (
+            <p>
+              🔒 {lockedBy} が発話中
+            </p>
+          )}
         </>
       )}
     </div>
