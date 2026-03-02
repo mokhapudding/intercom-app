@@ -1,7 +1,11 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Room, RoomEvent, RemoteParticipant } from "livekit-client";
+import { useState, useRef } from "react";
+import {
+  Room,
+  RoomEvent,
+  RemoteParticipant,
+} from "livekit-client";
 
 export default function Home() {
   const [room, setRoom] = useState<Room | null>(null);
@@ -13,7 +17,7 @@ export default function Home() {
 
   const roomRef = useRef<Room | null>(null);
 
-  // 🔗 接続処理
+  // 🔗 接続
   const connectToRoom = async () => {
     if (!username) return alert("名前入れてや");
 
@@ -40,12 +44,13 @@ export default function Home() {
       autoGainControl: true,
     });
 
-    // 👂 参加者管理
+    // 👥 参加者更新
     const updateParticipants = () => {
-      const names = Array.from(newRoom.participants.values()).map(
-        (p) => p.identity
-      );
-      setParticipants([username, ...names]);
+      const remoteNames = Array.from(
+        newRoom.remoteParticipants.values()
+      ).map((p: RemoteParticipant) => p.identity);
+
+      setParticipants([username, ...remoteNames]);
     };
 
     updateParticipants();
@@ -53,19 +58,24 @@ export default function Home() {
     newRoom.on(RoomEvent.ParticipantConnected, updateParticipants);
     newRoom.on(RoomEvent.ParticipantDisconnected, updateParticipants);
 
-    // 🔊 音声再生（自分は除外）
-    newRoom.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
-      if (participant.identity === username) return;
+    // 🔊 リモート音声再生
+    newRoom.on(
+      RoomEvent.TrackSubscribed,
+      (track, publication, participant) => {
+        if (participant.identity === username) return;
 
-      if (track.kind === "audio") {
-        const audioElement = track.attach();
-        audioElement.volume = 0.3; // 🔥 音量下げてハウリング軽減
-        document.body.appendChild(audioElement);
+        if (track.kind === "audio") {
+          const audioElement = track.attach();
+          audioElement.volume = 0.3; // 🔥 音量下げてハウリング軽減
+          document.body.appendChild(audioElement);
+        }
       }
-    });
+    );
 
-    // 📡 DataChannel受信
+    // 📡 Data受信（ロック＆話者表示）
     newRoom.on(RoomEvent.DataReceived, (payload, participant) => {
+      if (!participant) return;
+
       const message = new TextDecoder().decode(payload);
 
       if (message === "TALKING") {
@@ -83,7 +93,7 @@ export default function Home() {
     setConnected(true);
   };
 
-  // 🎤 PTT押した
+  // 🎤 押したら話す
   const startTalking = async () => {
     if (!roomRef.current) return;
     if (lockedBy && lockedBy !== username) return;
@@ -99,7 +109,7 @@ export default function Home() {
     setSpeakingUser(username);
   };
 
-  // 🎤 PTT離した
+  // 🎤 離したら止める
   const stopTalking = async () => {
     if (!roomRef.current) return;
 
