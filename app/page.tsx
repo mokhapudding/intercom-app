@@ -48,7 +48,20 @@ export default function Home() {
 
     updateParticipants();
 
-    room.on(RoomEvent.ParticipantConnected, updateParticipants);
+    room.on(RoomEvent.ParticipantConnected, (participant) => {
+      updateParticipants();
+
+      // すでに自分が発話中なら、新規参加者に現在状態を送信
+      if (lockedBy === username) {
+        room.localParticipant.publishData(
+          new TextEncoder().encode("TALKING"),
+          {
+            reliable: true,
+            destinationIdentities: [participant.identity],
+          }
+        );
+      }
+    });
     room.on(RoomEvent.ParticipantDisconnected, () => {
       updateParticipants();
       // ロック強制解除
